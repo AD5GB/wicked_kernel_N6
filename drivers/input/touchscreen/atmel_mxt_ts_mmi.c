@@ -2468,8 +2468,10 @@ static void mxt_set_sensor_state(struct mxt_data *data, int state)
 		if (!data->mode_is_wakeable)
 			mxt_irq_enable(data, false);
 		data->enable_reporting = false;
-		if (!data->in_bootloader)
+		if (!data->in_bootloader) {
 			mxt_sensor_state_config(data, SUSPEND_IDX);
+		}
+
 			break;
 
 	case STATE_ACTIVE:
@@ -2496,8 +2498,9 @@ static void mxt_set_sensor_state(struct mxt_data *data, int state)
 
 	case STATE_INIT:
 		/* set flag to avoid object specific message handling */
-		if (!data->in_bootloader)
+		if (!data->in_bootloader) {
 			data->in_bootloader = true;
+		}
 			break;
 	}
 
