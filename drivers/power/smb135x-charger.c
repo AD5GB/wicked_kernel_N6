@@ -1486,6 +1486,10 @@ static int smb135x_set_high_usb_chg_current(struct smb135x_chg *chip,
 	return rc;
 }
 
+#ifdef CONFIG_FORCE_FAST_CHARGE
+extern int force_fast_charge;
+#endif
+
 #define MAX_VERSION			0xF
 #define USB_100_PROBLEM_VERSION		0x2
 /* if APSD results are used
@@ -1535,7 +1539,17 @@ static int smb135x_set_usb_chg_current(struct smb135x_chg *chip,
 		goto out;
 	}
 	if (current_ma == CURRENT_500_MA) {
+#ifdef CONFIG_FORCE_FAST_CHARGE
+		if (force_fast_charge) {
+			current_ma = CURRENT_900_MA;
+			rc = smb135x_masked_write(chip, CFG_5_REG,
+				USB_2_3_BIT, USB_2_3_BIT);
+		} else
+			rc = smb135x_masked_write(chip, CFG_5_REG,
+				USB_2_3_BIT, 0);
+#else
 		rc = smb135x_masked_write(chip, CFG_5_REG, USB_2_3_BIT, 0);
+#endif
 		rc |= smb135x_masked_write(chip, CMD_INPUT_LIMIT,
 				USB_100_500_AC_MASK, USB_500_VAL);
 		rc |= smb135x_path_suspend(chip, USB, CURRENT, false);
@@ -2167,7 +2181,14 @@ static void smb135x_external_power_changed(struct power_supply *psy)
 
 	if (chip->usb_psy_ma != current_limit) {
 		mutex_lock(&chip->current_change_lock);
+#ifdef CONFIG_FORCE_FAST_CHARGE
+		if (force_fast_charge)
+			chip->usb_psy_ma = 1600;
+		else
+			chip->usb_psy_ma = current_limit;
+#else
 		chip->usb_psy_ma = current_limit;
+#endif
 		rc = smb135x_set_appropriate_current(chip, USB);
 		mutex_unlock(&chip->current_change_lock);
 		if (rc < 0)
@@ -2565,7 +2586,7 @@ static void wireless_insertion_work(struct work_struct *work)
 static int drop_usbin_rate(struct smb135x_chg *chip)
 {
 	int rc;
-	u8 reg;
+	u8 reg = 0;
 
 	rc = smb135x_read(chip, CFG_C_REG, &reg);
 	if (rc < 0)
@@ -2715,7 +2736,7 @@ static void toggle_usbin_aicl(struct smb135x_chg *chip)
 #define INPUT_CURR_CHECK_THRES 0x0C /*  1100 mA */
 static void heartbeat_work(struct work_struct *work)
 {
-	u8 reg;
+	u8 reg = 0;
 	int rc;
 	struct timespec bootup_time;
 	unsigned long float_timestamp;
@@ -3307,7 +3328,7 @@ static int smb135x_setup_vbat_monitoring(struct smb135x_chg *chip)
 
 	if (chip->poll_fast) { /* the adc polling rate is higher*/
 		chip->vbat_monitor_params.timer_interval =
-			ADC_MEAS1_INTERVAL_31P3MS;
+			ADC_MEAS1_INTERVAL_250MS;
 	} else /* adc polling rate is default*/ {
 		chip->vbat_monitor_params.timer_interval =
 			ADC_MEAS1_INTERVAL_1S;
@@ -4863,7 +4884,7 @@ static ssize_t force_chg_iusb_show(struct device *dev,
 					struct device_attribute *attr,
 					char *buf)
 {
-	int state;
+	int state = 0;
 	int ret;
 	u8 value;
 
